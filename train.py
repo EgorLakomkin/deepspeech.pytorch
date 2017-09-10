@@ -4,6 +4,7 @@ import json
 import os
 import time
 
+import numpy
 import torch
 from torch.autograd import Variable
 from warpctc_pytorch import CTCLoss
@@ -247,7 +248,7 @@ def main():
                 loss_value = 0
             else:
                 loss_value = loss.data[0]
-
+            assert not numpy.isnan(loss_value)
             avg_loss += loss_value
             losses.update(loss_value, inputs.size(0))
 

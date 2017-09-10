@@ -100,6 +100,7 @@ class SpectrogramParser(AudioParser):
         self.noise_prob = audio_conf.get('noise_prob')
 
     def parse_audio(self, audio_path):
+        eps = 1e-8
         if self.augment:
             y = load_randomly_augmented_audio(audio_path, self.sample_rate)
         else:
@@ -122,7 +123,7 @@ class SpectrogramParser(AudioParser):
             mean = spect.mean()
             std = spect.std()
             spect.add_(-mean)
-            spect.div_(std)
+            spect.div_(std+eps)
 
         return spect
 
@@ -158,6 +159,7 @@ class SpectrogramDataset(Dataset, SpectrogramParser):
         audio_path, transcript_path = sample[0], sample[1]
         spect = self.parse_audio(audio_path)
         transcript = self.parse_transcript(transcript_path)
+        assert len(transcript) > 0, "transcript is empty"
         return spect, transcript
 
     def parse_transcript(self, transcript_path):

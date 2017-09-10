@@ -35,12 +35,17 @@ new_files = []
 size = len(files)
 for x in range(size):
     file_path = files[x]
-    file_path = file_path.split(',')[0]
-    output = subprocess.check_output(
-        ['soxi -D \"%s\"' % file_path.strip()],
-        shell=True
-    )
-    duration = float(output)
+    sample_info = file_path.strip().split(",")
+    if len(sample_info) < 3:
+        #duration is not present in this sample
+        file_path = file_path.strip().split(',')[0]
+        output = subprocess.check_output(
+            ['soxi -D \"%s\"' % file_path.strip()],
+            shell=True
+        )
+        duration = float(output)
+    else:
+        duration = float(sample_info[-1])
     if prune_min or prune_max:
         duration_fit = True
         if prune_min:
@@ -50,16 +55,16 @@ for x in range(size):
             if duration > args.max_duration:
                 duration_fit = False
         if duration_fit:
-            new_files.append((files[x], duration))
+            new_files.append((sample_info[0], sample_info[1], duration))
     else:
-        new_files.append((files[x], duration))
+        new_files.append((sample_info[0], sample_info[1], duration))
     update_progress(x / float(size))
 
 print("\nSorting files by length...")
 
 
 def func(element):
-    return element[1]
+    return element[2]
 
 
 new_files.sort(key=func)
@@ -67,6 +72,6 @@ new_files.sort(key=func)
 print("Saving new manifest...")
 
 with io.FileIO(args.output_path, 'w') as f:
-    for file_path in new_files:
-        sample = file_path[0].strip() + '\n'
+    for wav_file, txt_file, duration in new_files:
+        sample = wav_file + ',' + txt_file + ',' + str(duration) + '\n'
         f.write(sample.encode('utf-8'))

@@ -12,8 +12,7 @@ class SpectrogramDatasetWithLength(SpectrogramDataset):
         Used by BucketingSampler to sample utterances from the same bin.
         """
         super(SpectrogramDatasetWithLength, self).__init__(*args, **kwargs)
-        audio_paths = [path for (path, _) in self.ids]
-        audio_lengths = [len(load_audio(path)) for path in audio_paths]
+        audio_lengths = [float(audio_len) for (_, _, audio_len) in self.ids]
         hist, bin_edges = np.histogram(audio_lengths, bins="auto")
         audio_samples_indices = np.digitize(audio_lengths, bins=bin_edges)
         self.bins_to_samples = defaultdict(list)
