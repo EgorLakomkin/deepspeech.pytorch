@@ -5,7 +5,7 @@ import torch
 from torch.autograd import Variable
 
 from data.data_loader import SpectrogramDataset, AudioDataLoader
-from decoder import GreedyDecoder, BeamCTCDecoder, Scorer, KenLMScorer
+from decoder import GreedyDecoder
 from model import DeepSpeech
 
 parser = argparse.ArgumentParser(description='DeepSpeech prediction')

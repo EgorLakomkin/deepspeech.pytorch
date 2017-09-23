@@ -12,7 +12,7 @@ from warpctc_pytorch import CTCLoss
 from data.bucketing_sampler import BucketingSampler, SpectrogramDatasetWithLength
 from data.data_loader import AudioDataLoader, SpectrogramDataset
 from decoder import GreedyDecoder
-from model import DeepSpeech, supported_rnns
+from model import DeepSpeech, supported_rnns, Wav2Letter
 
 parser = argparse.ArgumentParser(description='DeepSpeech training')
 parser.add_argument('--train_manifest', metavar='DIR',
@@ -149,12 +149,18 @@ def main():
 
     rnn_type = args.rnn_type.lower()
     assert rnn_type in supported_rnns, "rnn_type should be either lstm, rnn or gru"
-    model = DeepSpeech(rnn_hidden_size=args.hidden_size,
-                       nb_layers=args.hidden_layers,
-                       labels=labels,
-                       rnn_type=supported_rnns[rnn_type],
-                       audio_conf=audio_conf,
-                       bidirectional=True)
+
+    if False:
+        model = DeepSpeech(rnn_hidden_size=args.hidden_size,
+                           nb_layers=args.hidden_layers,
+                           labels=labels,
+                           rnn_type=supported_rnns[rnn_type],
+                          audio_conf=audio_conf,
+                          bidirectional=True)
+        acoustic_model_class = DeepSpeech
+    else:
+        acoustic_model_class = Wav2Letter
+        model = acoustic_model_class(labels=labels,audio_conf=audio_conf, )
     parameters = model.parameters()
     optimizer = torch.optim.SGD(parameters, lr=args.lr,
                                 momentum=args.momentum, nesterov=True)
@@ -276,7 +282,7 @@ def main():
             if args.checkpoint_per_batch > 0 and i > 0 and (i + 1) % args.checkpoint_per_batch == 0:
                 file_path = '%s/deepspeech_checkpoint_epoch_%d_iter_%d.pth.tar' % (save_folder, epoch + 1, i + 1)
                 print("Saving checkpoint model to %s" % file_path)
-                torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
+                torch.save(acoustic_model_class.serialize(model, optimizer=optimizer, epoch=epoch, iteration=i,
                                                 loss_results=loss_results,
                                                 wer_results=wer_results, cer_results=cer_results, avg_loss=avg_loss),
                            file_path)
@@ -368,7 +374,7 @@ def main():
                     logger.histo_summary(tag + '/grad', to_np(value.grad), epoch + 1)
         if args.checkpoint:
             file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+            torch.save(acoustic_model_class.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
                                             wer_results=wer_results, cer_results=cer_results),
                        file_path)
         # anneal lr
@@ -379,7 +385,7 @@ def main():
 
         if best_wer is None or best_wer > wer:
             print("Found better validated model, saving to %s" % args.model_path)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+            torch.save(acoustic_model_class.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
                                             wer_results=wer_results, cer_results=cer_results)
                        , args.model_path)
             best_wer = wer

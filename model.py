@@ -65,6 +65,158 @@ class BatchRNN(nn.Module):
             x = x.view(x.size(0), x.size(1), 2, -1).sum(2).view(x.size(0), x.size(1), -1)  # (TxNxH*2) -> (TxNxH) by sum
         return x
 
+class Wav2Letter(nn.Module):
+    def __init__(self, labels="abc", audio_conf=None):
+        super(Wav2Letter, self).__init__()
+
+        # model metadata needed for serialization/deserialization
+        if audio_conf is None:
+            audio_conf = {}
+        self._version = '0.0.1'
+        self._audio_conf = audio_conf or {}
+        self._labels = labels
+
+        sample_rate = self._audio_conf.get("sample_rate", 16000)
+        window_size = self._audio_conf.get("window_size", 0.02)
+        num_classes = len(self._labels)
+
+        #self.conv = nn.Sequential(
+        #    nn.Conv2d(1, 32, kernel_size=(41, 11), stride=(2, 2)),
+        #    nn.BatchNorm2d(32),
+        #    nn.Hardtanh(0, 20, inplace=True),
+        #    nn.Conv2d(32, 32, kernel_size=(21, 11), stride=(2, 1)),
+        #    nn.BatchNorm2d(32),
+        #   nn.Hardtanh(0, 20, inplace=True)
+        #)
+
+        #self.feature_extraction =  nn.Sequential(
+        #    nn.Conv2d(1, 32, kernel_size=(41, 11), stride=(2, 2)),
+        #    nn.BatchNorm2d(32),
+        #    nn.Hardtanh(0, 20, inplace=True),
+         #   nn.Conv2d(32, 32, kernel_size=(21, 11), stride=(2, 1)),
+         #   nn.BatchNorm2d(32),
+         ##   nn.Hardtanh(0, 20, inplace=True)
+        #)
+
+        self.convs = nn.Sequential(
+            nn.Conv1d(in_channels=161, out_channels=64, kernel_size=7, padding = 3, stride=2),
+            #nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=64, out_channels=128, kernel_size=7, padding = 3),
+            #nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=128, out_channels=256, kernel_size=7, padding = 3),
+            #nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
+            #nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
+            #nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
+            #nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
+            #nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=256, out_channels=2048, kernel_size=7, padding = 3),
+            #nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+
+            nn.Conv1d(in_channels=2048, out_channels=2048, kernel_size=1),
+            # nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+        )
+
+        #fully_connected = nn.Sequential(
+        #    nn.Linear(1024, num_classes)
+        #)
+        self.fc = nn.Sequential(
+            nn.Conv1d(in_channels=2048, out_channels=num_classes, kernel_size=1)
+        )
+        self.inference_log_softmax = InferenceBatchLogSoftmax()
+
+    def forward(self, x):
+        x = x.squeeze(1)
+        x = self.convs(x)
+
+        #sizes = x.size()
+        #x = x.view(sizes[0], sizes[1] * sizes[2])  # Collapse feature dimension
+        #x = x.transpose(1, 2).transpose(0, 1).contiguous()  # TxNxH
+
+        #x = self.rnns(x)
+
+        x = self.fc(x)
+        x = x.transpose(1, 2).contiguous()
+        #x = (b, T, |C| )
+        # identity in training mode, logsoftmax in eval mode
+        x = self.inference_log_softmax(x)
+        return x
+
+    @classmethod
+    def load_model(cls, path, cuda=False):
+        package = torch.load(path, map_location=lambda storage, loc: storage)
+        model = cls(labels=package['labels'], audio_conf=package['audio_conf'])
+        model.load_state_dict(package['state_dict'])
+        if cuda:
+            model = torch.nn.DataParallel(model).cuda()
+        return model
+
+    @staticmethod
+    def serialize(model, optimizer=None, epoch=None, iteration=None, loss_results=None,
+                  cer_results=None, wer_results=None, avg_loss=None, meta=None):
+        model_is_cuda = next(model.parameters()).is_cuda
+        model = model.module if model_is_cuda else model
+        package = {
+            'version': model._version,
+            'audio_conf': model._audio_conf,
+            'labels': model._labels,
+            'state_dict': model.state_dict()
+        }
+        if optimizer is not None:
+            package['optim_dict'] = optimizer.state_dict()
+        if avg_loss is not None:
+            package['avg_loss'] = avg_loss
+        if epoch is not None:
+            package['epoch'] = epoch + 1  # increment for readability
+        if iteration is not None:
+            package['iteration'] = iteration
+        if loss_results is not None:
+            package['loss_results'] = loss_results
+            package['cer_results'] = cer_results
+            package['wer_results'] = wer_results
+        if meta is not None:
+            package['meta'] = meta
+        return package
+
+    @staticmethod
+    def get_labels(model):
+        model_is_cuda = next(model.parameters()).is_cuda
+        return model.module._labels if model_is_cuda else model._labels
+
+    @staticmethod
+    def get_param_size(model):
+        params = 0
+        for p in model.parameters():
+            tmp = 1
+            for x in p.size():
+                tmp *= x
+            params += tmp
+        return params
+
+    @staticmethod
+    def get_audio_conf(model):
+        model_is_cuda = next(model.parameters()).is_cuda
+        return model.module._audio_conf if model_is_cuda else model._audio_conf
+
 
 class DeepSpeech(nn.Module):
     def __init__(self, rnn_type=nn.LSTM, labels="abc", rnn_hidden_size=768, nb_layers=5, audio_conf=None,

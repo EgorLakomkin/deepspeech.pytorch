@@ -8,7 +8,7 @@ import torch
 import torchaudio
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
-
+import time
 windows = {'hamming': scipy.signal.hamming, 'hann': scipy.signal.hann, 'blackman': scipy.signal.blackman,
            'bartlett': scipy.signal.bartlett}
 
@@ -175,6 +175,7 @@ class SpectrogramDataset(Dataset, SpectrogramParser):
 def _collate_fn(batch):
     def func(p):
         return p[0].size(1)
+    #batch = [sample for sample in batch if sample[0].size(1) > 0]
 
     longest_sample = max(batch, key=func)[0]
     freq_size = longest_sample.size(0)

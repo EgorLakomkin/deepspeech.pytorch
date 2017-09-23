@@ -3,6 +3,8 @@ import numpy as np
 from data.data_loader import SpectrogramDataset, load_audio
 from collections import defaultdict
 
+from data.utils import _get_duration
+
 
 class SpectrogramDatasetWithLength(SpectrogramDataset):
     def __init__(self, *args, **kwargs):
@@ -12,7 +14,10 @@ class SpectrogramDatasetWithLength(SpectrogramDataset):
         Used by BucketingSampler to sample utterances from the same bin.
         """
         super(SpectrogramDatasetWithLength, self).__init__(*args, **kwargs)
-        audio_lengths = [float(audio_len) for (_, _, audio_len) in self.ids]
+        if len(self.ids[0]) < 3:
+            audio_lengths = [_get_duration(audio_file) for (audio_file, _) in self.ids]
+        else:
+            audio_lengths = [float(audio_len) for (_, _, audio_len) in self.ids]
         hist, bin_edges = np.histogram(audio_lengths, bins="auto")
         audio_samples_indices = np.digitize(audio_lengths, bins=bin_edges)
         self.bins_to_samples = defaultdict(list)
