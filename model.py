@@ -97,51 +97,49 @@ class Wav2Letter(nn.Module):
          #   nn.BatchNorm2d(32),
          ##   nn.Hardtanh(0, 20, inplace=True)
         #)
+        def _block(in_channels, out_channels, kernel_size, padding = 0, stride = 1, bnorm = False, bias=True):
+            res = []
 
+            res.append(
+                nn.Conv1d(in_channels=in_channels, out_channels=out_channels,
+                          kernel_size=kernel_size, padding=padding, stride=stride, bias=bias)
+            )
+            if bnorm:
+                res.append(nn.BatchNorm1d(out_channels))
+            res.append(nn.ReLU(inplace=True))
+            return res
+
+        size = 2048
+        bnorm = True
         self.convs = nn.Sequential(
-            nn.Conv1d(in_channels=161, out_channels=64, kernel_size=7, padding = 3, stride=2),
-            #nn.BatchNorm1d(64),
-            nn.ReLU(inplace=True),
+            *_block(in_channels=161, out_channels=256, kernel_size=7, padding = 3, stride=2, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm=bnorm, bias=not bnorm),
 
-            nn.Conv1d(in_channels=64, out_channels=128, kernel_size=7, padding = 3),
-            #nn.BatchNorm1d(128),
-            nn.ReLU(inplace=True),
+            *_block(in_channels=256, out_channels=size, kernel_size=31, padding=15, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=size, out_channels=size, kernel_size=1, bnorm = bnorm, bias=not bnorm),
 
-            nn.Conv1d(in_channels=128, out_channels=256, kernel_size=7, padding = 3),
-            #nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-
-            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
-            #nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-
-            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
-            #nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-
-            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
-            #nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-
-            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=7, padding = 3),
-            #nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-
-            nn.Conv1d(in_channels=256, out_channels=2048, kernel_size=7, padding = 3),
-            #nn.BatchNorm1d(512),
-            nn.ReLU(inplace=True),
-
-            nn.Conv1d(in_channels=2048, out_channels=2048, kernel_size=1),
-            # nn.BatchNorm1d(512),
-            nn.ReLU(inplace=True),
         )
 
         #fully_connected = nn.Sequential(
         #    nn.Linear(1024, num_classes)
         #)
         self.fc = nn.Sequential(
-            nn.Conv1d(in_channels=2048, out_channels=num_classes, kernel_size=1)
+            nn.Conv1d(in_channels=size, out_channels=num_classes, kernel_size=1)
         )
+        #fully_connected = nn.Sequential(
+        #    nn.BatchNorm1d(size),
+        #    nn.Linear(size, num_classes, bias=False)
+        #)
+        #self.fc = nn.Sequential(
+        #    SequenceWise(fully_connected),
+        #)
+
         self.inference_log_softmax = InferenceBatchLogSoftmax()
 
     def forward(self, x):
@@ -150,12 +148,15 @@ class Wav2Letter(nn.Module):
 
         #sizes = x.size()
         #x = x.view(sizes[0], sizes[1] * sizes[2])  # Collapse feature dimension
-        #x = x.transpose(1, 2).transpose(0, 1).contiguous()  # TxNxH
+          # TxNxH
 
         #x = self.rnns(x)
 
+        #should have (T,N,H)
+        #x = x.transpose(1, 2).transpose(0, 1).contiguous()
         x = self.fc(x)
         x = x.transpose(1, 2).contiguous()
+        #x = x.transpose(0, 1).contiguous()
         #x = (b, T, |C| )
         # identity in training mode, logsoftmax in eval mode
         x = self.inference_log_softmax(x)
