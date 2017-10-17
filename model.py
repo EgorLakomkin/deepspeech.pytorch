@@ -80,23 +80,6 @@ class Wav2Letter(nn.Module):
         window_size = self._audio_conf.get("window_size", 0.02)
         num_classes = len(self._labels)
 
-        #self.conv = nn.Sequential(
-        #    nn.Conv2d(1, 32, kernel_size=(41, 11), stride=(2, 2)),
-        #    nn.BatchNorm2d(32),
-        #    nn.Hardtanh(0, 20, inplace=True),
-        #    nn.Conv2d(32, 32, kernel_size=(21, 11), stride=(2, 1)),
-        #    nn.BatchNorm2d(32),
-        #   nn.Hardtanh(0, 20, inplace=True)
-        #)
-
-        #self.feature_extraction =  nn.Sequential(
-        #    nn.Conv2d(1, 32, kernel_size=(41, 11), stride=(2, 2)),
-        #    nn.BatchNorm2d(32),
-        #    nn.Hardtanh(0, 20, inplace=True),
-         #   nn.Conv2d(32, 32, kernel_size=(21, 11), stride=(2, 1)),
-         #   nn.BatchNorm2d(32),
-         ##   nn.Hardtanh(0, 20, inplace=True)
-        #)
         def _block(in_channels, out_channels, kernel_size, padding = 0, stride = 1, bnorm = False, bias=True):
             res = []
 
@@ -121,24 +104,14 @@ class Wav2Letter(nn.Module):
             *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
             *_block(in_channels=256, out_channels=256, kernel_size=7, padding=3, bnorm=bnorm, bias=not bnorm),
 
-            *_block(in_channels=256, out_channels=size, kernel_size=31, padding=15, bnorm = bnorm, bias=not bnorm),
+            *_block(in_channels=256, out_channels=size, kernel_size=7, padding=3, bnorm = bnorm, bias=not bnorm),
             *_block(in_channels=size, out_channels=size, kernel_size=1, bnorm = bnorm, bias=not bnorm),
 
         )
 
-        #fully_connected = nn.Sequential(
-        #    nn.Linear(1024, num_classes)
-        #)
         self.fc = nn.Sequential(
             nn.Conv1d(in_channels=size, out_channels=num_classes, kernel_size=1)
         )
-        #fully_connected = nn.Sequential(
-        #    nn.BatchNorm1d(size),
-        #    nn.Linear(size, num_classes, bias=False)
-        #)
-        #self.fc = nn.Sequential(
-        #    SequenceWise(fully_connected),
-        #)
 
         self.inference_log_softmax = InferenceBatchLogSoftmax()
 
@@ -146,19 +119,8 @@ class Wav2Letter(nn.Module):
         x = x.squeeze(1)
         x = self.convs(x)
 
-        #sizes = x.size()
-        #x = x.view(sizes[0], sizes[1] * sizes[2])  # Collapse feature dimension
-          # TxNxH
-
-        #x = self.rnns(x)
-
-        #should have (T,N,H)
-        #x = x.transpose(1, 2).transpose(0, 1).contiguous()
         x = self.fc(x)
         x = x.transpose(1, 2).contiguous()
-        #x = x.transpose(0, 1).contiguous()
-        #x = (b, T, |C| )
-        # identity in training mode, logsoftmax in eval mode
         x = self.inference_log_softmax(x)
         return x
 
@@ -217,6 +179,11 @@ class Wav2Letter(nn.Module):
     def get_audio_conf(model):
         model_is_cuda = next(model.parameters()).is_cuda
         return model.module._audio_conf if model_is_cuda else model._audio_conf
+
+
+    def print_info(self):
+        print("Wav2Letter version: ", self._version)
+        print("")
 
 
 class DeepSpeech(nn.Module):
@@ -346,6 +313,13 @@ class DeepSpeech(nn.Module):
         model_is_cuda = next(model.parameters()).is_cuda
         return model.module._audio_conf if model_is_cuda else model._audio_conf
 
+    def print_info(self):
+        print("DeepSpeech version: ", self._version)
+        print("")
+        print("Recurrent Neural Network Properties")
+        print("  RNN Type:         ", self._rnn_type.__name__.lower())
+        print("  RNN Layers:       ", self._hidden_layers)
+        print("  RNN Size:         ", self._hidden_size)
 
 if __name__ == '__main__':
     import os.path
@@ -356,15 +330,14 @@ if __name__ == '__main__':
                         help='Path to model file created by training')
     args = parser.parse_args()
     package = torch.load(args.model_path, map_location=lambda storage, loc: storage)
-    model = DeepSpeech.load_model(args.model_path)
+    if 'rnn_type' in package:
+        model = DeepSpeech.load_model(args.model_path)
+    else:
+        model = Wav2Letter.load_model(args.model_path)
 
     print("Model name:         ", os.path.basename(args.model_path))
-    print("DeepSpeech version: ", model._version)
-    print("")
-    print("Recurrent Neural Network Properties")
-    print("  RNN Type:         ", model._rnn_type.__name__.lower())
-    print("  RNN Layers:       ", model._hidden_layers)
-    print("  RNN Size:         ", model._hidden_size)
+
+
     print("  Classes:          ", len(model._labels))
     print("")
     print("Model Features")
